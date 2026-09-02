@@ -13,8 +13,8 @@ module.exports = async (req, res) => {
 
     const PAYLOAD = {
         "id": 308,
-        "gameId": 291,
-        "websiteId": 17,
+        "gameId": 208,
+        "websiteId": 19,
         "gameCode": 0,
         "timeCode": 4,
         "pageNo": 1,
