@@ -1,12 +1,13 @@
 const axios = require('axios');
 
-// Default Tokens (Fallback / In-Memory Cache)
-let cachedAuthToken = "bearer eyJhbGciOiJSUzI1NiJ9.eyJzdWIiOiI5MS05MzAxOTM4NDc3Iiwib3RoZXIiOm51bGwsImlkIjoxMTYzMzcsInR5cGUiOjIsImV4cCI6MTc4NjcxMDIzOCwiaWF0IjoxNzg2NjIzODM4LCJhdXRob3JpdGllcyI6W10sImp0aSI6IjQxZTdlZWE4LTM4ZjgtNGY4OS1hYWY1LTMxZTE0MzA4YmE5YSJ9.b84CVhLdwRtsVcNS_MQlyt7XjlFDMQ_UomTb-5PHoeovS9lmryf24okIcGqxEq_2wc66JD5elDnvXhxI05leNTZJDOGO4_xds90ThR6jks_c3ZkRcBF6AqjiTuzpynvetbuH4m7Pit4Wd0ScbBIuO00DyW8EXfqqZx_EuHe8Wuk";
-let cachedXAuthToken = "bearer eyJhbGciOiJSUzI1NiJ9.eyJzdWIiOiI5MS05MzAxOTM4NDc3Iiwib3RoZXIiOm51bGwsImlkIjoxMTYzMzcsInR5cGUiOjIsImV4cCI6MTc3MjI4ODYzOCwiaWF0IjoxNzg2NjIzODM4LCJhdXRob3JpdGllcyI6W10sImp0aSI6ImQyY2QzMzUwLWY1MTMtNGNkOC1hY2FlLWRkYjVhOGMxZTdjNyJ9.DPPCmKs8hrun7dv_gMfiDgH9oSYWatK5S3dLckABjRcYaw7SoaFgALQeOIVIvnVn73GRa604j1CTZdJTXS-g1NvlK7AUbk_q8RNTnsjiFRyzOtwL3jdbf0adU2LFWEuQ5cFjNZ-A2g7Nvsci2kijxlTdO0JG47dHAdV6TxIY3kA";
+// In-Memory Token Cache
+let cachedAuthToken = "bearer eyJhbGciOiJSUzI1NiJ9.eyJzdWIiOiI5MS05MzAxOTM4NDc3Iiwib3RoZXIiOm51bGwsImlkIjoxMTYzMzcsInR5cGUiOjIsImV4cCI6MTc4NzQwMTk1MywiaWF0IjoxNzg3MzE1NTUzLCJhdXRob3JpdGllcyI6W10sImp0aSI6ImZlNWJkYzY1LWI1MWEtNDRmYy04MmQ0LTM1NjNhZDcyZmJlNyJ9.QdC11ZXvO5RxgBwvEq8o2iuzwJVGsV646hVy2FfjJY-6eyuss4AzYZfrYD7Cqq_4ZZ8PwYWWPFcfsUfBmq4r_RBByVOpPtgwoyvTVTAd8yE85W-0qKV-eBVO5L6dT9zvbnYyjvFV5ZupPKwmbKghKtasOVIUlZ5AORmOzZoqWhI";
+let cachedXAuthToken = "bearer eyJhbGciOiJSUzI1NiJ9.eyJzdWIiOiI5MS05MzAxOTM4NDc3Iiwib3RoZXIiOm51bGwsImlkIjoxMTYzMzcsInR5cGUiOjIsImV4cCI6MTc4NzkyMDM1MywiaWF0IjoxNzg3MzE1NTUzLCJhdXRob3JpdGllcyI6W10sImp0aSI6IjM0ZDFkODQxLTNlNjktNGM1MS04ODA2LWE2ODBhNzk0NjIyZiJ9.INdktR96c419BFM2i2HwVrVV9aZ64x5cYLaLk4rXbZQAYaLDny4nspXIuZcPpPQ5a1Xp4FdWW4NrY8IzdrpSd6IVfRxpFUwltVl6Pa41L-zswSYMwhrAzaVp-rdtNbmPs6lcKM7iz8xRR-w-saELJL76qKmmeGgOixdyFazucb8";
 
-// Instant Token Refresh via Login API
+// Instant Auto-Login Refresh Function
 async function refreshAuthTokens() {
     try {
+        console.log("Refreshing fresh tokens via 01k3.com login API...");
         const loginUrl = 'https://01k3.com/api/member/auth/login';
         const loginPayload = {
             "account": "91-9301938477",
@@ -36,12 +37,12 @@ async function refreshAuthTokens() {
             if (token) {
                 cachedAuthToken = token.startsWith('bearer ') || token.startsWith('Bearer ') ? token : `bearer ${token}`;
                 cachedXAuthToken = xToken.startsWith('bearer ') || xToken.startsWith('Bearer ') ? xToken : `bearer ${xToken}`;
-                return { success: true, message: "Token refreshed successfully!" };
+                return { success: true };
             }
         }
-        return { success: false, message: "Login did not return valid token", data: resData };
+        return { success: false, data: resData };
     } catch (err) {
-        return { success: false, message: err.message };
+        return { success: false, error: err.message };
     }
 }
 
@@ -56,7 +57,7 @@ module.exports = async (req, res) => {
 
     const action = req.query.action || (req.body && req.body.action);
 
-    // 1. Health Check System (?action=health)
+    // 1. Health Check
     if (action === 'health') {
         return res.status(200).json({
             status: "ok",
@@ -66,60 +67,63 @@ module.exports = async (req, res) => {
         });
     }
 
-    // 2. Force Refresh Token on Click (?action=force_refresh)
+    // 2. Force Refresh Token on Click
     if (action === 'refresh' || action === 'force_refresh') {
         const refreshResult = await refreshAuthTokens();
         if (refreshResult.success) {
             return res.status(200).json({ success: true, message: "Fresh token generated successfully!" });
         } else {
-            return res.status(500).json({ success: false, error: refreshResult.message });
+            return res.status(500).json({ success: false, error: refreshResult.error || "Login Failed" });
         }
     }
 
     const TARGET_API = 'https://01k3.com/api/game/plan/recordDetails';
 
-    // 3. Dynamic payload support (kisi bhi mode/gameId/id ka data switch karne ke liye)
+    // 3. Clean and exact payload schema for 01k3.com
     const PAYLOAD = {
         "id": req.query.id ? Number(req.query.id) : (req.body && req.body.id ? Number(req.body.id) : 308),
         "gameId": req.query.gameId ? Number(req.query.gameId) : (req.body && req.body.gameId ? Number(req.body.gameId) : 142),
         "websiteId": req.query.websiteId ? Number(req.query.websiteId) : (req.body && req.body.websiteId ? Number(req.body.websiteId) : 15),
         "gameCode": req.query.gameCode !== undefined ? Number(req.query.gameCode) : (req.body && req.body.gameCode !== undefined ? Number(req.body.gameCode) : 2),
         "timeCode": req.query.timeCode !== undefined ? Number(req.query.timeCode) : (req.body && req.body.timeCode !== undefined ? Number(req.body.timeCode) : 0),
-        "pageNo": req.query.pageNo ? Number(req.query.pageNo) : (req.body && req.body.pageNo ? Number(req.body.pageNo) : 1),
-        "pageSize": req.query.pageSize ? Number(req.query.pageSize) : (req.body && req.body.pageSize ? Number(req.body.pageSize) : 10)
+        "pageNo": req.query.pageNo ? Number(req.query.pageNo) : (req.query.pageIndex ? Number(req.query.pageIndex) : 1),
+        "pageSize": req.query.pageSize ? Number(req.query.pageSize) : 10
     };
 
-    const executeReq = async () => {
+    const executeReq = async (authTkn, xAuthTkn) => {
         return await axios.post(TARGET_API, PAYLOAD, {
             headers: {
-                'Content-Type': 'application/json',
-                'Authorization': cachedAuthToken,
-                'x-authorization': cachedXAuthToken,
+                'authority': '01k3.com',
+                'accept': 'application/json, text/plain, */*',
+                'content-type': 'application/json;charset=UTF-8',
+                'Authorization': req.headers['authorization'] || authTkn,
+                'x-authorization': req.headers['x-authorization'] || xAuthTkn,
+                'origin': 'https://01k3.com',
+                'referer': 'https://01k3.com/',
                 'User-Agent': 'Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36'
             },
-            timeout: 8000
+            timeout: 10000
         });
     };
 
     try {
-        let response = await executeReq();
+        let response = await executeReq(cachedAuthToken, cachedXAuthToken);
 
-        // Automatic Token Refresh if Expired (Error Code 1007)
-        if (response.data && response.data.code === 1007) {
+        // Auto-fix if Code 1000 or Code 1007 detected
+        if (response.data && (response.data.code === 1007 || response.data.code === 1000)) {
             const refreshed = await refreshAuthTokens();
             if (refreshed.success) {
-                response = await executeReq();
+                response = await executeReq(cachedAuthToken, cachedXAuthToken);
             }
         }
 
         res.status(200).json(response.data);
     } catch (error) {
-        // Automatic Token Refresh if HTTP 401 Unauthorized
-        if (error.response && error.response.status === 401) {
+        if (error.response && (error.response.status === 401 || (error.response.data && (error.response.data.code === 1007 || error.response.data.code === 1000)))) {
             const refreshed = await refreshAuthTokens();
             if (refreshed.success) {
                 try {
-                    const retryRes = await executeReq();
+                    const retryRes = await executeReq(cachedAuthToken, cachedXAuthToken);
                     return res.status(200).json(retryRes.data);
                 } catch (retryErr) {
                     return res.status(500).json({ error: "Retry Failed", details: retryErr.message });
