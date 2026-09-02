@@ -4,10 +4,10 @@ const axios = require('axios');
 let cachedAuthToken = "bearer eyJhbGciOiJSUzI1NiJ9.eyJzdWIiOiI5MS05MzAxOTM4NDc3Iiwib3RoZXIiOm51bGwsImlkIjoxMTYzMzcsInR5cGUiOjIsImV4cCI6MTc4NzQwMTk1MywiaWF0IjoxNzg3MzE1NTUzLCJhdXRob3JpdGllcyI6W10sImp0aSI6ImZlNWJkYzY1LWI1MWEtNDRmYy04MmQ0LTM1NjNhZDcyZmJlNyJ9.QdC11ZXvO5RxgBwvEq8o2iuzwJVGsV646hVy2FfjJY-6eyuss4AzYZfrYD7Cqq_4ZZ8PwYWWPFcfsUfBmq4r_RBByVOpPtgwoyvTVTAd8yE85W-0qKV-eBVO5L6dT9zvbnYyjvFV5ZupPKwmbKghKtasOVIUlZ5AORmOzZoqWhI";
 let cachedXAuthToken = "bearer eyJhbGciOiJSUzI1NiJ9.eyJzdWIiOiI5MS05MzAxOTM4NDc3Iiwib3RoZXIiOm51bGwsImlkIjoxMTYzMzcsInR5cGUiOjIsImV4cCI6MTc4NzkyMDM1MywiaWF0IjoxNzg3MzE1NTUzLCJhdXRob3JpdGllcyI6W10sImp0aSI6IjM0ZDFkODQxLTNlNjktNGM1MS04ODA2LWE2ODBhNzk0NjIyZiJ9.INdktR96c419BFM2i2HwVrVV9aZ64x5cYLaLk4rXbZQAYaLDny4nspXIuZcPpPQ5a1Xp4FdWW4NrY8IzdrpSd6IVfRxpFUwltVl6Pa41L-zswSYMwhrAzaVp-rdtNbmPs6lcKM7iz8xRR-w-saELJL76qKmmeGgOixdyFazucb8";
 
-// Function: Automatic Fresh Token Generator via Login API
+// Auto-Login Refresh Function
 async function refreshAuthTokens() {
     try {
-        console.log("Fetching fresh tokens via login API...");
+        console.log("Auto-refreshing tokens via 01k3.com login...");
         const loginUrl = 'https://01k3.com/api/member/auth/login';
         
         const loginPayload = {
@@ -39,21 +39,17 @@ async function refreshAuthTokens() {
             if (token) {
                 cachedAuthToken = token.startsWith('bearer ') || token.startsWith('Bearer ') ? token : `bearer ${token}`;
                 cachedXAuthToken = xToken.startsWith('bearer ') || xToken.startsWith('Bearer ') ? xToken : `bearer ${xToken}`;
-                console.log("Successfully generated and cached fresh tokens!");
+                console.log("Tokens cached successfully!");
                 return { success: true };
             }
         }
-        console.warn("Login response did not return token:", resData);
         return { success: false, data: resData };
     } catch (err) {
-        console.error("Auto-login request failed:", err.message);
         return { success: false, error: err.message };
     }
 }
 
-// Main Vercel / Express Serverless Function Handler
 module.exports = async (req, res) => {
-    // CORS configuration
     res.setHeader('Access-Control-Allow-Credentials', 'true');
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS,PATCH,DELETE,POST,PUT');
@@ -68,7 +64,7 @@ module.exports = async (req, res) => {
 
     const action = req.query.action || (req.body && req.body.action);
 
-    // 1. Health Check System Endpoint (?action=health)
+    // 1. Health System Endpoint
     if (action === 'health') {
         return res.status(200).json({
             status: "healthy",
@@ -79,7 +75,7 @@ module.exports = async (req, res) => {
         });
     }
 
-    // 2. Force Refresh Token on Click Endpoint (?action=refresh / ?action=force_refresh)
+    // 2. Force Refresh Token on Click
     if (action === 'refresh' || action === 'force_refresh') {
         const refreshResult = await refreshAuthTokens();
         if (refreshResult.success) {
@@ -100,24 +96,24 @@ module.exports = async (req, res) => {
     const endpoint = req.query.endpoint || 'recordDetails';
     const TARGET_API = `https://01k3.com/api/game/plan/${endpoint}`;
 
-    // 3. Dynamic payload support (Query params ya Body se kisi bhi mode/id ka data mangwa sakte hain)
-    let payload = {
-        "id": req.query.id ? Number(req.query.id) : 308,
-        "gameId": req.query.gameId ? Number(req.query.gameId) : 142,
-        "websiteId": req.query.websiteId ? Number(req.query.websiteId) : 15,
-        "gameCode": req.query.gameCode !== undefined ? Number(req.query.gameCode) : 2,
-        "timeCode": req.query.timeCode !== undefined ? Number(req.query.timeCode) : 0,
-        "pageNo": req.query.pageNo ? Number(req.query.pageNo) : (req.query.pageIndex ? Number(req.query.pageIndex) : 1),
-        "pageSize": req.query.pageSize ? Number(req.query.pageSize) : 10,
-        "optionId": req.query.optionId || req.query.gameId || "291"
-    };
-
-    if (req.body && Object.keys(req.body).length > 0) {
-        payload = { ...payload, ...req.body };
+    // 3. Clean Payload Builder (Strict schema to prevent Code 1000 Error)
+    let payload;
+    if (req.body && typeof req.body === 'object' && Object.keys(req.body).length > 0) {
+        payload = { ...req.body };
+    } else {
+        payload = {
+            "id": Number(req.query.id || 308),
+            "gameId": Number(req.query.gameId || (req.query.optionId === '291' ? 142 : (req.query.optionId ? Number(req.query.optionId) : 142))),
+            "websiteId": Number(req.query.websiteId || 15),
+            "gameCode": req.query.gameCode !== undefined ? Number(req.query.gameCode) : 2,
+            "timeCode": req.query.timeCode !== undefined ? Number(req.query.timeCode) : 0,
+            "pageNo": Number(req.query.pageNo || req.query.pageIndex || 1),
+            "pageSize": Number(req.query.pageSize || 10)
+        };
     }
 
-    const executeRequest = async (authTkn, xAuthTkn) => {
-        return await axios.post(TARGET_API, payload, {
+    const executeRequest = async (authTkn, xAuthTkn, currentPayload) => {
+        return await axios.post(TARGET_API, currentPayload, {
             headers: {
                 'authority': '01k3.com',
                 'accept': 'application/json, text/plain, */*',
@@ -134,25 +130,24 @@ module.exports = async (req, res) => {
     };
 
     try {
-        let targetResponse = await executeRequest(cachedAuthToken, cachedXAuthToken);
+        let targetResponse = await executeRequest(cachedAuthToken, cachedXAuthToken, payload);
 
-        // Automatic token refresh on expired code 1007
-        if (targetResponse.data && targetResponse.data.code === 1007) {
+        // Auto-refresh if Code 1000 (System Abnormality) or Code 1007 (Token Expired)
+        if (targetResponse.data && (targetResponse.data.code === 1007 || targetResponse.data.code === 1000)) {
             const loginSuccess = await refreshAuthTokens();
             if (loginSuccess.success) {
-                targetResponse = await executeRequest(cachedAuthToken, cachedXAuthToken);
+                targetResponse = await executeRequest(cachedAuthToken, cachedXAuthToken, payload);
             }
         }
 
         return res.status(200).json(targetResponse.data);
 
     } catch (error) {
-        // Automatic token refresh on HTTP 401 Unauthorized
-        if (error.response && (error.response.status === 401 || (error.response.data && error.response.data.code === 1007))) {
+        if (error.response && (error.response.status === 401 || (error.response.data && (error.response.data.code === 1007 || error.response.data.code === 1000)))) {
             const loginSuccess = await refreshAuthTokens();
             if (loginSuccess.success) {
                 try {
-                    const retryResponse = await executeRequest(cachedAuthToken, cachedXAuthToken);
+                    const retryResponse = await executeRequest(cachedAuthToken, cachedXAuthToken, payload);
                     return res.status(200).json(retryResponse.data);
                 } catch (retryErr) {
                     return res.status(500).json({ error: "Retry failed", message: retryErr.message });
