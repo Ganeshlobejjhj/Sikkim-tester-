@@ -76,7 +76,7 @@ module.exports = async (req, res) => {
         ? req.body 
         : {
             "pageIndex": 1,
-            "pageSize": 10,
+            "pageSize": 100,
             "optionId": "308"
         };
 
