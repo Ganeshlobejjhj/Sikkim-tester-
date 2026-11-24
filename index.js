@@ -77,7 +77,7 @@ module.exports = async (req, res) => {
         : {
             "pageIndex": 1,
             "pageSize": 100,
-            "optionId": "308"
+            "optionId": "78"
         };
 
     const executeRequest = async (authTkn, xAuthTkn) => {
